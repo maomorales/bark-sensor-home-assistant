@@ -1,0 +1,8 @@
+numpy
+scipy
+sounddevice
+paho-mqtt
+loguru
+PyYAML
+tflite-runtime
+requests

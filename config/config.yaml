@@ -1,0 +1,45 @@
+device_id: "linux-mic-01"
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  window_seconds: 1.0
+  hop_seconds: 0.5
+  mic_device_index: null
+
+detection:
+  mode: "yamnet"
+  yamnet:
+    model_url: "https://storage.googleapis.com/audioset/yamnet/yamnet.tflite"
+    classes_url: "https://storage.googleapis.com/audioset/yamnet/yamnet_class_map.csv"
+    conf_threshold: 0.6
+    label_substrings: ["dog", "bark", "bow", "yip"]
+  heuristic:
+    rms_threshold: 0.02
+    band_low_hz: 400
+    band_high_hz: 3000
+    band_energy_min: 1.0e-6
+
+smoothing:
+  window_count: 3
+  positives_required: 2
+  cooldown_seconds: 20
+
+capture:
+  enabled: true
+  ring_seconds: 20
+  pre_seconds: 5
+  post_seconds: 5
+  out_dir: "/var/lib/barkdetector/captures"
+
+mqtt:
+  host: "192.168.1.10"
+  port: 1883
+  topic: "home/sensors/dog_bark"
+  username: ""
+  password: ""
+  client_id: ""
+
+logging:
+  level: "INFO"
+  file_path: "/var/log/barkdetector/barkdetector.log"

@@ -1,0 +1,16 @@
+alias: Dog Bark Alert
+trigger:
+  - platform: mqtt
+    topic: home/sensors/dog_bark
+condition: []
+action:
+  - service: notify.mobile_app_yourphone
+    data:
+      message: >
+        🐶 Bark detected ({{ (trigger.payload_json.score | float) | round(2) }})
+        via {{ trigger.payload_json.detector }} on {{ trigger.payload_json.device_id }}
+  # Optional: additional actions, such as turning on lights or cameras
+  # - service: switch.turn_on
+  #   target:
+  #     entity_id: switch.porch_camera_record
+mode: single

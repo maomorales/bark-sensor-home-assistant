@@ -1,0 +1,16 @@
+[Unit]
+Description=Bark Detector (YAMNet/Heuristic) -> MQTT
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/barkdetector
+ExecStart=/usr/bin/python3 /opt/barkdetector/main.py --config /opt/barkdetector/config/config.yaml
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,1 @@
+"""Bark detector package."""
