@@ -19,25 +19,49 @@ Python-based proof-of-concept that detects dog barks from a live Linux microphon
 Dependencies are listed in `requirements.txt` and installed via `scripts/setup.sh`.
 
 ## Quick Start
+
+### 1. Setup
 ```bash
 git clone https://example.com/barkdetector.git
 cd barkdetector
 ./scripts/setup.sh
 ```
 
-Edit `config/config.yaml` to suit your environment (MQTT host, microphone index, thresholds).
+This creates a virtual environment, installs dependencies, and sets up directories.
 
-List microphones:
+### 2. Activate Virtual Environment
+```bash
+source .venv/bin/activate
+```
+
+### 3. Configure
+Edit `config/config.yaml` to suit your environment:
+- **MQTT settings**: Update `host`, `port`, `username`, `password` to match your Home Assistant MQTT broker
+- **Audio device**: Use `--list-devices` (below) to find your microphone index
+- **Detection mode**: Choose `yamnet` (ML-based) or `heuristic` (simpler, faster)
+
+### 4. List Available Microphones
 ```bash
 python3 main.py --list-devices
 ```
 
-Run the detector:
+### 5. Test MQTT Connection (Optional)
+Before running the detector, verify MQTT connectivity:
 ```bash
+python3 test_mqtt.py
+```
+This subscribes to the bark topic and displays any incoming events. Press Ctrl+C to stop.
+
+### 6. Run the Detector
+```bash
+# With MQTT publishing
 python3 main.py --config config/config.yaml
+
+# Dry run (no MQTT, testing only)
+python3 main.py --config config/config.yaml --dry-run
 ```
 
-On the first run the script downloads `models/yamnet.tflite` and `models/yamnet_class_map.csv`.
+On the first run, the script downloads `models/yamnet.tflite` and `models/yamnet_class_map.csv` if YAMNet mode is enabled.
 
 ## Configuration
 - `config/config.yaml` contains runtime settings (audio, detection, MQTT, logging).

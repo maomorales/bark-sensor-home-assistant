@@ -21,7 +21,7 @@ from detector.yamnet import (
     YAMNetConfig,
     YAMNetInitializationError,
 )
-from io.mqtt_client import MQTTConfig, MQTTPublisher
+from mqtt.mqtt_client import MQTTConfig, MQTTPublisher
 
 
 def parse_args() -> argparse.Namespace:

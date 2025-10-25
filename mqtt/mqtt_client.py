@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Optional
 
@@ -26,7 +27,15 @@ class MQTTPublisher:
 
     def __init__(self, config: MQTTConfig, client_id: Optional[str] = None) -> None:
         self.config = config
-        self.client = mqtt.Client(client_id=client_id or "", clean_session=True)
+
+        # Generate unique client ID if none provided to avoid conflicts
+        if not client_id or client_id.strip() == "":
+            client_id = f"barkdetector-{uuid.uuid4().hex[:8]}"
+            logger.warning(
+                "No client_id configured; auto-generated unique ID: {}", client_id
+            )
+
+        self.client = mqtt.Client(client_id=client_id, clean_session=True)
         if config.username:
             self.client.username_pw_set(config.username, config.password or "")
         self.client.on_connect = self._on_connect
@@ -37,7 +46,7 @@ class MQTTPublisher:
     def start(self) -> None:
         """Connect to the broker and start the network loop."""
         try:
-            self.client.connect(self.config.host, int(self.config.port))
+            self.client.connect(self.config.host, int(self.config.port), keepalive=120)
         except Exception as exc:  # pragma: no cover - network dependent
             logger.error("Initial MQTT connection failed: {}", exc)
         self.client.loop_start()
@@ -50,7 +59,7 @@ class MQTTPublisher:
         except Exception:
             pass
 
-    def publish(self, payload: dict, qos: int = 0, retain: bool = False) -> None:
+    def publish(self, payload: dict, qos: int = 1, retain: bool = False) -> None:
         """Publish a JSON payload to the configured topic."""
         data = json.dumps(payload)
         if not self._connected.wait(timeout=2.0):
@@ -58,6 +67,8 @@ class MQTTPublisher:
         result = self.client.publish(self.config.topic, data, qos=qos, retain=retain)
         if result.rc not in (mqtt.MQTT_ERR_SUCCESS, mqtt.MQTT_ERR_NO_CONN):
             logger.error("MQTT publish failed with code {}", result.rc)
+        else:
+            logger.debug("Published to MQTT topic {} with QoS {}", self.config.topic, qos)
 
     # Callbacks -------------------------------------------------------
 
