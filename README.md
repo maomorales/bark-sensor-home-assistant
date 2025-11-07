@@ -2,6 +2,11 @@
 
 Python-based proof-of-concept that detects dog barks from a live Linux microphone and publishes MQTT events for Home Assistant automations. By default it uses the YAMNet TFLite model and falls back to a heuristic detector if the model cannot be loaded.
 
+This program not only detects dog barks in real time, but also publishes these events over MQTT so that you can easily create automations in Home Assistant—for example, turning on lights, starting a recording on a camera, or activating a smart pet feeder when barking is detected.
+
+Additionally, bark events can be sent to Dailybot, allowing you to build other types of automations such as real-time notifications in Slack or Discord, or alerting specific people whenever barking occurs.
+
+
 ## Features
 - Live audio capture via ALSA (`sounddevice`) with 16 kHz mono resampling.
 - YAMNet (TFLite) inference with automatic model download on first run.
@@ -87,3 +92,52 @@ Import `ha_automation_example.yaml` to add a notification that fires when the MQ
 - When YAMNet cannot be loaded (missing model, download failure, etc.), the heuristic detector remains active so events are still produced.
 - Use `--dry-run` to evaluate detection without publishing MQTT messages.
 - WAV captures are disabled automatically if the configured directory is not writable.
+
+### DailyBot Integration
+
+You can configure BarkDetector to send notifications to a [DailyBot](https://dailybot.com/) workflow when a bark is detected.
+
+**Requirements:**
+- A DailyBot account.
+- A workflow with a **Trigger type: Universal API** (see [DailyBot docs on Universal Triggers](https://help.dailybot.com)).
+- Your workflow's trigger URL.
+
+**Steps:**
+
+1. **Create a new workflow in DailyBot**  
+   Go to your DailyBot dashboard and create a new workflow.  
+   Set the trigger type to **Universal API**.
+
+2. **Configure fields for the trigger:**  
+   - Set the event type to `"hardware_sensor"`.  
+   - Set the secret `"sensor"` (or another value, but then update the code's `send_dailybot_event()` to match).
+   - Optionally, configure any additional fields in the workflow for your use.
+
+3. **Copy the Workflow Trigger URL:**  
+   In the workflow's settings, you'll see a _Universal API Trigger URL_ (it looks like `https://api.dailybot.com/integrations/event/UUID-here/`).
+
+4. **Update your config:**  
+   In your `config.yaml` (or override at runtime with `--dailybot`), set the workflow URL:
+   ```yaml
+   dailybot:
+     workflow_url: "https://api.dailybot.com/integrations/event/UUID-here/"
+   ```
+   This URL will be used for POST requests when the detector triggers a bark event.
+
+**Payload details**  
+When a bark event is detected, the following JSON payload is sent to DailyBot:
+- `event_type` (default: `"hardware_sensor"`)
+- `secret` (default: `"sensor"`)
+- All bark detection metadata (`event`, `score`, `ts`, `device_id`, `detector`, etc.)
+- `capture_path` (if audio capture is enabled)
+
+If you use a custom `event_type` or `secret`, make sure to also update `main.py` in the `send_dailybot_event` function, so the payload matches what your workflow expects.
+
+**Enabling DailyBot integration**  
+- Use the `--dailybot` flag with `main.py` to enable sending events:
+  ```bash
+  python3 main.py --config config/config.yaml --dailybot
+  ```
+- If `workflow_url` is missing from config, DailyBot events will _not_ be sent.
+
+For troubleshooting, check logs to verify POSTs are reaching DailyBot.

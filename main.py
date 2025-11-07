@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import numpy as np
+import requests
 import yaml
 from loguru import logger
 
@@ -40,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Run without publishing MQTT events",
+    )
+    parser.add_argument(
+        "--dailybot",
+        action="store_true",
+        help="Enable DailyBot integration for bark events",
     )
     return parser.parse_args()
 
@@ -178,6 +184,36 @@ def build_mqtt(config: Dict[str, Any], dry_run: bool) -> Optional[MQTTPublisher]
     return publisher
 
 
+def send_dailybot_event(
+    payload: Dict[str, Any], capture_path: Optional[Path], dailybot_url: str
+) -> None:
+    """Send a POST request to DailyBot API when a bark is detected."""
+    # Build the DailyBot payload with required fields and all bark parameters
+    dailybot_payload = {
+        "event_type": "hardware_sensor",
+        "secret": "sensor",
+    }
+    
+    # Add all bark detection parameters
+    dailybot_payload.update(payload)
+    
+    # Add capture_path if available
+    if capture_path:
+        dailybot_payload["capture_path"] = str(capture_path)
+    
+    try:
+        response = requests.post(
+            dailybot_url,
+            json=dailybot_payload,
+            headers={"Content-Type": "application/json"},
+            timeout=5.0,
+        )
+        response.raise_for_status()
+        logger.debug("Successfully sent bark event to DailyBot")
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Failed to send bark event to DailyBot: {}", exc)
+
+
 def main() -> None:
     args = parse_args()
     config_path = Path(args.config)
@@ -207,6 +243,21 @@ def main() -> None:
 
     capture_manager = configure_capture(config, sample_rate)
     mqtt_publisher = build_mqtt(config, args.dry_run)
+
+    # Check DailyBot configuration
+    dailybot_enabled = args.dailybot
+    dailybot_url = ""
+    if dailybot_enabled:
+        dailybot_cfg = config.get("dailybot", {})
+        dailybot_url = dailybot_cfg.get("workflow_url", "") or ""
+        if not dailybot_url:
+            logger.error(
+                "DailyBot integration is enabled (--dailybot flag) but dailybot.workflow_url is not defined in config. "
+                "Please set dailybot.workflow_url in your config file. Continuing without DailyBot integration."
+            )
+            dailybot_enabled = False
+        else:
+            logger.info("DailyBot integration enabled")
 
     smoother_cfg = config.get("smoothing", {})
     smoother = EventSmoother(
@@ -279,6 +330,9 @@ def main() -> None:
                     )
                     if mqtt_publisher:
                         mqtt_publisher.publish(payload)
+                    # Send to DailyBot API if enabled and URL is configured
+                    if dailybot_enabled:
+                        send_dailybot_event(payload, capture_path, dailybot_url)
     except KeyboardInterrupt:
         logger.info("Interrupted by user, shutting down")
     finally:

@@ -40,6 +40,9 @@ mqtt:
   password: ""
   client_id: ""
 
+dailybot:
+  workflow_url: ""
+
 logging:
   level: "INFO"
   file_path: "/var/log/barkdetector/barkdetector.log"
