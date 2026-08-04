@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +21,7 @@ class CaptureConfig:
     pre_seconds: float
     post_seconds: float
     out_dir: Path
+    max_age_hours: float = 0
 
 
 @dataclass
@@ -108,7 +111,10 @@ class AudioCaptureManager:
         self._ring = AudioRingBuffer(int(config.ring_seconds * sample_rate))
         self._jobs: List[_CaptureJob] = []
         self._disabled = False
+        self._cleanup_stop = threading.Event()
+        self._cleanup_thread: Optional[threading.Thread] = None
         self._ensure_output_dir()
+        self._start_cleanup_loop()
 
     def _ensure_output_dir(self) -> None:
         if not self.config.enabled:
@@ -173,3 +179,44 @@ class AudioCaptureManager:
         int_audio = np.int16(audio * 32767)
         wavfile.write(job.file_path, self.sample_rate, int_audio)
         logger.info("Saved capture to {}", job.file_path)
+
+    # Cleanup -----------------------------------------------------------
+
+    def _start_cleanup_loop(self) -> None:
+        if not self.config.enabled or self._disabled:
+            return
+        if self.config.max_age_hours <= 0:
+            return
+        self._cleanup_thread = threading.Thread(
+            target=self._cleanup_loop, daemon=True, name="capture-cleanup"
+        )
+        self._cleanup_thread.start()
+
+    def _cleanup_loop(self) -> None:
+        interval = 3600.0  # check once per hour
+        while not self._cleanup_stop.wait(timeout=0):
+            self._cleanup_old_captures()
+            if self._cleanup_stop.wait(timeout=interval):
+                break
+
+    def _cleanup_old_captures(self) -> None:
+        max_age_secs = self.config.max_age_hours * 3600
+        now = time.time()
+        removed = 0
+        try:
+            for path in self.config.out_dir.glob("*.wav"):
+                try:
+                    if now - path.stat().st_mtime > max_age_secs:
+                        path.unlink()
+                        removed += 1
+                        logger.debug("Removed old capture {}", path)
+                except OSError as exc:
+                    logger.warning("Could not remove {}: {}", path, exc)
+        except OSError as exc:
+            logger.warning("Cleanup scan failed: {}", exc)
+        if removed:
+            logger.info("Cleaned up {} old capture(s)", removed)
+
+    def stop_cleanup(self) -> None:
+        """Signal the cleanup thread to stop."""
+        self._cleanup_stop.set()

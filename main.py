@@ -158,6 +158,7 @@ def configure_capture(config: Dict[str, Any], sample_rate: int) -> AudioCaptureM
             pre_seconds=float(capture_cfg.get("pre_seconds", 5)),
             post_seconds=float(capture_cfg.get("post_seconds", 5)),
             out_dir=out_dir,
+            max_age_hours=float(capture_cfg.get("max_age_hours", 0)),
         ),
         sample_rate=sample_rate,
     )
@@ -336,6 +337,7 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Interrupted by user, shutting down")
     finally:
+        capture_manager.stop_cleanup()
         audio_provider.stop()
         if mqtt_publisher:
             mqtt_publisher.stop()

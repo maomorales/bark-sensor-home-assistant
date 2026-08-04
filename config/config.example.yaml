@@ -31,6 +31,7 @@ capture:
   pre_seconds: 5
   post_seconds: 5
   out_dir: "/var/lib/barkdetector/captures"
+  max_age_hours: 24  # 0 = keep forever
 
 mqtt:
   host: "192.168.1.10"
