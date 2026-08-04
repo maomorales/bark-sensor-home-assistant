@@ -22,7 +22,10 @@ class AudioStreamConfig:
     channels: int
     window_seconds: float
     hop_seconds: float
-    mic_device_index: Optional[int] = None
+    # An int selects a PortAudio device index, a str matches part of a device
+    # name (indices are not stable across reboots or USB re-enumeration), and
+    # None uses the system default input.
+    mic_device_index: Optional[object] = None
 
 
 class AudioStreamError(Exception):
@@ -122,10 +125,35 @@ class AudioStreamProvider:
                 logger.info("Audio stream stopped; reconnecting in 2 seconds")
                 time.sleep(2.0)
 
+    def _resolve_device(self) -> Optional[int]:
+        """Turn the configured device selector into a PortAudio index."""
+        selector = self.config.mic_device_index
+        if selector is None or isinstance(selector, int):
+            return selector
+
+        needle = str(selector).strip().lower()
+        if not needle:
+            return None
+
+        for idx, name, _rate, _channels in self.list_input_devices():
+            if needle in name.lower():
+                logger.info("Matched microphone '{}' to device [{}] {}", selector, idx, name)
+                return idx
+
+        available = ", ".join(
+            f"[{idx}] {name}" for idx, name, _r, _c in self.list_input_devices()
+        ) or "none"
+        logger.error(
+            "No input device matches '{}'; falling back to the default. Available: {}",
+            selector,
+            available,
+        )
+        return None
+
     def _open_stream(
         self, queue_: "queue.Queue[np.ndarray]"
     ) -> Tuple[sd.InputStream, int]:
-        device = self.config.mic_device_index
+        device = self._resolve_device()
         target_rate = self.config.sample_rate
         candidate_rates: List[int] = [target_rate]
 

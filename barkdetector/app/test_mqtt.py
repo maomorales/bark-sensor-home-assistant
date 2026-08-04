@@ -2,9 +2,15 @@
 """Test MQTT connection and subscribe to bark events."""
 
 import paho.mqtt.client as mqtt
+import os
 import time
 import json
 import sys
+
+BROKER_HOST = os.environ.get("BARKDETECTOR_MQTT_HOST", "127.0.0.1")
+BROKER_PORT = int(os.environ.get("BARKDETECTOR_MQTT_PORT", "1883"))
+BROKER_USERNAME = os.environ.get("BARKDETECTOR_MQTT_USERNAME", "")
+BROKER_PASSWORD = os.environ.get("BARKDETECTOR_MQTT_PASSWORD", "")
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -45,15 +51,16 @@ def cleanup(client):
 
 # Create MQTT client with unique ID to avoid conflicts
 client = mqtt.Client(client_id="barkdetector-test", clean_session=True)
-client.username_pw_set("mqtt_user", "mqtt_pass123")
+if BROKER_USERNAME:
+    client.username_pw_set(BROKER_USERNAME, BROKER_PASSWORD)
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect
 
-print("🔌 Connecting to MQTT broker at 192.168.1.229:1883...")
+print(f"🔌 Connecting to MQTT broker at {BROKER_HOST}:{BROKER_PORT}...")
 print("   Client ID: barkdetector-test")
 try:
-    client.connect("192.168.1.229", 1883, 60)
+    client.connect(BROKER_HOST, BROKER_PORT, 60)
     client.loop_start()
 
     print("👂 Listening for bark events... (Press Ctrl+C to stop)")

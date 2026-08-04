@@ -1,0 +1,81 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+set -e
+
+CONFIG_PATH=/data/app-config.yaml
+
+# ---------------------------------------------------------------------------
+# MQTT broker: prefer the Supervisor-provided service (Mosquitto add-on) so the
+# user never has to type credentials. Manual options win if they are set.
+# ---------------------------------------------------------------------------
+if bashio::config.has_value 'mqtt_host'; then
+    bashio::log.info "Using manually configured MQTT broker"
+    export BARKDETECTOR_MQTT_HOST="$(bashio::config 'mqtt_host')"
+    export BARKDETECTOR_MQTT_PORT="$(bashio::config 'mqtt_port' '1883')"
+    bashio::config.has_value 'mqtt_username' \
+        && export BARKDETECTOR_MQTT_USERNAME="$(bashio::config 'mqtt_username')"
+    bashio::config.has_value 'mqtt_password' \
+        && export BARKDETECTOR_MQTT_PASSWORD="$(bashio::config 'mqtt_password')"
+elif bashio::services.available 'mqtt'; then
+    bashio::log.info "Using the MQTT broker provided by the Supervisor"
+    export BARKDETECTOR_MQTT_HOST="$(bashio::services 'mqtt' 'host')"
+    export BARKDETECTOR_MQTT_PORT="$(bashio::services 'mqtt' 'port')"
+    export BARKDETECTOR_MQTT_USERNAME="$(bashio::services 'mqtt' 'username')"
+    export BARKDETECTOR_MQTT_PASSWORD="$(bashio::services 'mqtt' 'password')"
+else
+    bashio::exit.nok \
+        "No MQTT broker available. Install the Mosquitto broker add-on, or set mqtt_host in this add-on's configuration."
+fi
+
+export BARKDETECTOR_MQTT_TOPIC="$(bashio::config 'mqtt_topic')"
+export BARKDETECTOR_MQTT_CLIENT_ID="barkdetector-addon"
+
+if bashio::config.has_value 'dailybot_workflow_url'; then
+    export BARKDETECTOR_DAILYBOT_URL="$(bashio::config 'dailybot_workflow_url')"
+    DAILYBOT_FLAG="--dailybot"
+else
+    DAILYBOT_FLAG=""
+fi
+
+if bashio::config.true 'mqtt_discovery'; then
+    export BARKDETECTOR_MQTT_DISCOVERY="1"
+fi
+
+# ---------------------------------------------------------------------------
+# Render the application config from the add-on options.
+# ---------------------------------------------------------------------------
+python3 /usr/bin/render_config.py /data/options.json "${CONFIG_PATH}" \
+    || bashio::exit.nok "Failed to render the application configuration"
+
+# ---------------------------------------------------------------------------
+# Audio sanity check. A missing mic is the single most common failure, so make
+# it loud in the add-on log rather than letting PortAudio fail cryptically.
+# ---------------------------------------------------------------------------
+if ! bashio::fs.directory_exists '/run/audio'; then
+    bashio::log.warning "Home Assistant audio plugin is not mapped; is 'audio: true' set?"
+fi
+
+bashio::log.info "Detected audio input sources:"
+pactl list short sources 2>/dev/null || bashio::log.warning "Unable to query PulseAudio sources"
+
+# PortAudio silently falls back to a null ALSA device when it cannot reach the
+# PulseAudio server, which looks like a working stream delivering pure silence.
+# Dump the routing so that failure is diagnosable from the add-on log.
+if bashio::config.equals 'log_level' 'debug' || bashio::config.equals 'log_level' 'trace'; then
+    bashio::log.info "--- audio routing diagnostics ---"
+    bashio::log.info "PULSE_SERVER=${PULSE_SERVER:-<unset>}"
+    ls -la /run/audio 2>&1 | head -5
+    echo "--- /etc/asound.conf ---"
+    cat /etc/asound.conf 2>&1 | head -20
+    echo "--- pactl info ---"
+    pactl info 2>&1 | head -8
+    echo "--- ALSA PCMs (arecord -L) ---"
+    arecord -L 2>&1 | head -20
+    echo "--- PortAudio devices as seen by sounddevice ---"
+    python3 -c "import sounddevice; print(sounddevice.query_devices())" 2>&1 | head -20
+    bashio::log.info "--- end diagnostics ---"
+fi
+
+bashio::log.info "Starting bark detector..."
+cd /app
+exec python3 /app/main.py --config "${CONFIG_PATH}" ${DAILYBOT_FLAG}

@@ -1,0 +1,10 @@
+# Debian bases, not the default Alpine base. numpy, scipy and tflite-runtime
+# publish manylinux (glibc) wheels only; on musl pip would try to build them
+# from source and fail on a Pi.
+#
+# Pinned to bookworm because bookworm ships Python 3.11, and tflite-runtime
+# 2.14.0 (last release, Oct 2023) has no wheel newer than cp311. Moving to
+# trixie (Python 3.13) silently drops YAMNet to the heuristic detector.
+build_from:
+  aarch64: ghcr.io/home-assistant/aarch64-base-debian:bookworm-2026.03.0
+  amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm-2026.02.0

@@ -1,0 +1,12 @@
+# tflite-runtime 2.14.0 (its final release, Oct 2023) is built against the
+# NumPy 1.x C ABI. Installing NumPy 2.x makes the interpreter fail at load with
+# "_ARRAY_API not found", which silently drops the detector to the heuristic
+# fallback. Keep this pin until the app moves to ai-edge-litert.
+numpy>=1.26,<2
+scipy
+sounddevice
+paho-mqtt
+loguru
+PyYAML
+tflite-runtime
+requests

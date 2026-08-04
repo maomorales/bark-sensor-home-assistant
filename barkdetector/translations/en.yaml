@@ -1,0 +1,84 @@
+configuration:
+  device_id:
+    name: Device ID
+    description: Identifies this sensor in MQTT payloads and in discovery.
+  detection_mode:
+    name: Detection mode
+    description: >-
+      yamnet uses the YAMNet neural network. heuristic uses RMS and band energy;
+      it is lighter but far noisier.
+  conf_threshold:
+    name: Confidence threshold
+    description: >-
+      YAMNet confidence needed to count a window as a bark. Lower catches more
+      barks, higher reduces false positives.
+  mic_device:
+    name: Microphone
+    description: >-
+      Part of the input device name, or a numeric index. Leave empty for the
+      system default. Prefer a name; indices change across reboots.
+  normalize_windows:
+    name: Boost quiet audio before analysis
+    description: >-
+      Amplify each window towards a consistent level before classification.
+      YAMNet is level-sensitive, so this helps with distant or quiet barks. It
+      cannot recover sound already buried in background noise.
+  normalize_noise_floor:
+    name: Normalisation noise floor
+    description: >-
+      Windows with a peak below this are left untouched, so silence is not
+      amplified into hiss.
+  normalize_max_gain:
+    name: Maximum normalisation gain
+    description: How far a single quiet window may be amplified.
+  windows_total:
+    name: Vote window size
+    description: How many recent audio windows are considered.
+  windows_required:
+    name: Positive windows required
+    description: >-
+      How many of those windows must be positive to fire an event. Raise this to
+      reject brief noises.
+  cooldown_seconds:
+    name: Cooldown
+    description: Minimum seconds between two published events.
+  mqtt_topic:
+    name: MQTT topic
+    description: Topic bark events are published to.
+  mqtt_discovery:
+    name: Enable MQTT discovery
+    description: Automatically create the Bark binary sensor in Home Assistant.
+  capture_enabled:
+    name: Save audio clips
+    description: >-
+      Write a WAV around each event to /share/barkdetector/captures. Useful for
+      tuning, but it grows on disk.
+  capture_retention_hours:
+    name: Keep clips for (hours)
+    description: Clips older than this are deleted automatically.
+  capture_max_mb:
+    name: Maximum clip storage (MB)
+    description: >-
+      Hard ceiling on the clips folder. When exceeded, the oldest clips are
+      deleted immediately, even if they are newer than the retention window.
+      Set to 0 to disable the size limit.
+  log_level:
+    name: Log level
+    description: Set to debug to see the score of every analysed window.
+  mqtt_host:
+    name: MQTT host (optional)
+    description: >-
+      Only for an external broker. Leave empty to use the Mosquitto add-on
+      automatically.
+  mqtt_port:
+    name: MQTT port (optional)
+    description: Only used together with MQTT host.
+  mqtt_username:
+    name: MQTT username (optional)
+    description: Only used together with MQTT host.
+  mqtt_password:
+    name: MQTT password (optional)
+    description: Only used together with MQTT host.
+  dailybot_workflow_url:
+    name: DailyBot workflow URL (optional)
+    description: Post bark events to a DailyBot workflow in addition to MQTT.

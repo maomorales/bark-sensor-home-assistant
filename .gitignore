@@ -29,7 +29,7 @@ MANIFEST
 data/captures
 
 # Configuration files with sensitive data
-config/config.yaml
+barkdetector/app/config/config.yaml
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -213,6 +213,7 @@ __marimo__/
 
 # Virtual environment
 bin/
+!barkdetector/rootfs/usr/bin/
 lib/
 lib64/
 lib64

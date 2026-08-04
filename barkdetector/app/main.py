@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -48,6 +49,16 @@ def parse_args() -> argparse.Namespace:
         help="Enable DailyBot integration for bark events",
     )
     return parser.parse_args()
+
+
+def env_override(name: str, fallback: Any) -> Any:
+    """Return the environment value for ``name`` when set, otherwise ``fallback``.
+
+    Lets secrets (MQTT credentials, DailyBot URL) stay out of the config file so
+    the same config can be committed and the deployment supplies the values.
+    """
+    value = os.environ.get(name)
+    return value if value not in (None, "") else fallback
 
 
 def load_config(path: Path) -> Dict[str, Any]:
@@ -147,6 +158,30 @@ def build_detectors(config: Dict[str, Any], sample_rate: int) -> tuple[Any, str,
     return active_detector, active_name, heuristic, yamnet_threshold
 
 
+def normalize_window(
+    window: np.ndarray, target_peak: float, noise_floor: float, max_gain: float
+) -> tuple[np.ndarray, float]:
+    """Scale a window up towards ``target_peak`` for level-sensitive scoring.
+
+    YAMNet consumes a log-mel spectrogram, so it is not level-invariant: a
+    distant sound peaking at 0.02 sits roughly 30 dB below the levels the model
+    was trained on and scores far lower than the same sound up close.
+
+    Windows quieter than ``noise_floor`` are left alone -- scaling pure room
+    tone up to full scale just feeds the classifier amplified hiss. ``max_gain``
+    bounds how much amplification any single window can receive.
+    """
+    peak = float(np.max(np.abs(window))) if window.size else 0.0
+    if peak <= noise_floor:
+        return window, 1.0
+
+    gain = min(target_peak / peak, max_gain)
+    if gain <= 1.0:
+        return window, 1.0
+
+    return np.clip(window * gain, -1.0, 1.0).astype(np.float32, copy=False), gain
+
+
 def configure_capture(config: Dict[str, Any], sample_rate: int) -> AudioCaptureManager:
     capture_cfg = config.get("capture", {})
     enabled = bool(capture_cfg.get("enabled", True))
@@ -159,6 +194,7 @@ def configure_capture(config: Dict[str, Any], sample_rate: int) -> AudioCaptureM
             post_seconds=float(capture_cfg.get("post_seconds", 5)),
             out_dir=out_dir,
             max_age_hours=float(capture_cfg.get("max_age_hours", 0)),
+            max_total_mb=float(capture_cfg.get("max_total_mb", 0)),
         ),
         sample_rate=sample_rate,
     )
@@ -173,13 +209,15 @@ def build_mqtt(config: Dict[str, Any], dry_run: bool) -> Optional[MQTTPublisher]
 
     publisher = MQTTPublisher(
         MQTTConfig(
-            host=mqtt_cfg.get("host", "localhost"),
-            port=int(mqtt_cfg.get("port", 1883)),
-            topic=mqtt_cfg.get("topic", "home/sensors/dog_bark"),
-            username=(mqtt_cfg.get("username") or None),
-            password=(mqtt_cfg.get("password") or None),
+            host=env_override("BARKDETECTOR_MQTT_HOST", mqtt_cfg.get("host", "localhost")),
+            port=int(env_override("BARKDETECTOR_MQTT_PORT", mqtt_cfg.get("port", 1883))),
+            topic=env_override(
+                "BARKDETECTOR_MQTT_TOPIC", mqtt_cfg.get("topic", "home/sensors/dog_bark")
+            ),
+            username=(env_override("BARKDETECTOR_MQTT_USERNAME", mqtt_cfg.get("username")) or None),
+            password=(env_override("BARKDETECTOR_MQTT_PASSWORD", mqtt_cfg.get("password")) or None),
         ),
-        client_id=mqtt_cfg.get("client_id"),
+        client_id=env_override("BARKDETECTOR_MQTT_CLIENT_ID", mqtt_cfg.get("client_id")),
     )
     publisher.start()
     return publisher
@@ -245,12 +283,17 @@ def main() -> None:
     capture_manager = configure_capture(config, sample_rate)
     mqtt_publisher = build_mqtt(config, args.dry_run)
 
+    if mqtt_publisher and env_override("BARKDETECTOR_MQTT_DISCOVERY", ""):
+        mqtt_publisher.publish_discovery(device_id)
+
     # Check DailyBot configuration
     dailybot_enabled = args.dailybot
     dailybot_url = ""
     if dailybot_enabled:
         dailybot_cfg = config.get("dailybot", {})
-        dailybot_url = dailybot_cfg.get("workflow_url", "") or ""
+        dailybot_url = env_override(
+            "BARKDETECTOR_DAILYBOT_URL", dailybot_cfg.get("workflow_url", "")
+        ) or ""
         if not dailybot_url:
             logger.error(
                 "DailyBot integration is enabled (--dailybot flag) but dailybot.workflow_url is not defined in config. "
@@ -273,6 +316,21 @@ def main() -> None:
         config, sample_rate
     )
 
+    norm_cfg = config.get("detection", {}).get("normalize", {})
+    normalize_cfg = {
+        "enabled": bool(norm_cfg.get("enabled", False)),
+        "target_peak": float(norm_cfg.get("target_peak", 0.5)),
+        "noise_floor": float(norm_cfg.get("noise_floor", 0.005)),
+        "max_gain": float(norm_cfg.get("max_gain", 30.0)),
+    }
+    if normalize_cfg["enabled"]:
+        logger.info(
+            "Window normalisation enabled (target_peak={} noise_floor={} max_gain={}x)",
+            normalize_cfg["target_peak"],
+            normalize_cfg["noise_floor"],
+            normalize_cfg["max_gain"],
+        )
+
     window_samples = int(round(window_seconds * sample_rate))
     hop_samples = int(round(hop_seconds * sample_rate))
     buffer = np.zeros(0, dtype=np.float32)
@@ -289,9 +347,18 @@ def main() -> None:
                 window = buffer[:window_samples]
                 buffer = buffer[hop_samples:]
 
+                gain_applied = 1.0
                 try:
                     if detector_name == "yamnet":
-                        score = float(detector.score_bark(window))
+                        scored_window = window
+                        if normalize_cfg["enabled"]:
+                            scored_window, gain_applied = normalize_window(
+                                window,
+                                normalize_cfg["target_peak"],
+                                normalize_cfg["noise_floor"],
+                                normalize_cfg["max_gain"],
+                            )
+                        score = float(detector.score_bark(scored_window))
                         positive = score >= yamnet_threshold
                     else:
                         score, metrics = heuristic_detector.evaluate(window)
@@ -307,11 +374,16 @@ def main() -> None:
                         continue
 
                 triggered = smoother.update(positive, timestamp)
+                # rms/peak make a dead microphone obvious: PortAudio can open a
+                # silent device and look perfectly healthy while scoring zeros.
                 logger.debug(
-                    "Window score {:.3f} positive={} detector={}",
+                    "Window score {:.3f} positive={} detector={} rms={:.5f} peak={:.5f} gain={:.1f}x",
                     score,
                     positive,
                     detector_name,
+                    float(np.sqrt(np.mean(np.square(window)))),
+                    float(np.max(np.abs(window))) if window.size else 0.0,
+                    gain_applied,
                 )
 
                 if triggered:

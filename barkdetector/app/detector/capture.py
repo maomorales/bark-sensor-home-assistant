@@ -22,6 +22,10 @@ class CaptureConfig:
     post_seconds: float
     out_dir: Path
     max_age_hours: float = 0
+    # Hard ceiling on the capture directory. Age alone bounds nothing: a noisy
+    # night can produce thousands of files that are all younger than the age
+    # limit. 0 disables the size check.
+    max_total_mb: float = 0
 
 
 @dataclass
@@ -113,6 +117,11 @@ class AudioCaptureManager:
         self._disabled = False
         self._cleanup_stop = threading.Event()
         self._cleanup_thread: Optional[threading.Thread] = None
+        # Serialises deletion. The hourly sweep and the post-write check can
+        # otherwise both scan, both compute a total from the same stale view,
+        # and each delete down to the budget -- removing roughly twice what is
+        # needed.
+        self._prune_lock = threading.Lock()
         self._ensure_output_dir()
         self._start_cleanup_loop()
 
@@ -179,13 +188,64 @@ class AudioCaptureManager:
         int_audio = np.int16(audio * 32767)
         wavfile.write(job.file_path, self.sample_rate, int_audio)
         logger.info("Saved capture to {}", job.file_path)
+        # Enforce on every write, not just on the hourly sweep -- a burst of
+        # events can blow the budget many times over between two sweeps.
+        self._enforce_size_budget()
 
     # Cleanup -----------------------------------------------------------
+
+    def _enforce_size_budget(self) -> None:
+        """Delete the oldest captures until the directory fits the budget."""
+        if self._disabled or self.config.max_total_mb <= 0:
+            return
+        with self._prune_lock:
+            self._enforce_size_budget_locked()
+
+    def _enforce_size_budget_locked(self) -> None:
+        budget_bytes = self.config.max_total_mb * 1024 * 1024
+        try:
+            files = []
+            total = 0
+            for path in self.config.out_dir.glob("*.wav"):
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                files.append((stat.st_mtime, stat.st_size, path))
+                total += stat.st_size
+        except OSError as exc:
+            logger.warning("Capture size scan failed: {}", exc)
+            return
+
+        if total <= budget_bytes:
+            return
+
+        files.sort()  # oldest first
+        removed = 0
+        freed = 0
+        for _mtime, size, path in files:
+            if total <= budget_bytes:
+                break
+            try:
+                path.unlink()
+                total -= size
+                freed += size
+                removed += 1
+            except OSError as exc:
+                logger.warning("Could not remove {}: {}", path, exc)
+
+        if removed:
+            logger.warning(
+                "Capture directory exceeded {} MB; removed {} oldest file(s), freed {:.1f} MB",
+                self.config.max_total_mb,
+                removed,
+                freed / (1024 * 1024),
+            )
 
     def _start_cleanup_loop(self) -> None:
         if not self.config.enabled or self._disabled:
             return
-        if self.config.max_age_hours <= 0:
+        if self.config.max_age_hours <= 0 and self.config.max_total_mb <= 0:
             return
         self._cleanup_thread = threading.Thread(
             target=self._cleanup_loop, daemon=True, name="capture-cleanup"
@@ -200,6 +260,14 @@ class AudioCaptureManager:
                 break
 
     def _cleanup_old_captures(self) -> None:
+        self._enforce_size_budget()
+        if self.config.max_age_hours <= 0:
+            return
+
+        with self._prune_lock:
+            self._cleanup_old_captures_locked()
+
+    def _cleanup_old_captures_locked(self) -> None:
         max_age_secs = self.config.max_age_hours * 3600
         now = time.time()
         removed = 0

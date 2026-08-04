@@ -1,0 +1,67 @@
+# https://developers.home-assistant.io/docs/apps/configuration#app-configuration
+name: Bark Detector
+version: "0.2.0"
+slug: barkdetector
+description: Detect dog barks from a USB microphone with YAMNet and publish them to MQTT
+url: "https://github.com/mauriciomorales/barkdetector/tree/main/barkdetector"
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+
+# Grants the PulseAudio server run by Home Assistant's audio plugin. Do NOT
+# also map /dev/snd: the audio plugin holds the ALSA devices, so a second
+# process opening them directly gets "device busy".
+audio: true
+
+# Pulls broker host/credentials from the Supervisor so the user never types
+# them; the app falls back to manual options when the service is absent.
+services:
+  - mqtt:want
+
+map:
+  - share:rw
+
+options:
+  device_id: "barkdetector"
+  detection_mode: "yamnet"
+  conf_threshold: 0.2
+  mic_device: ""
+  normalize_windows: false
+  normalize_noise_floor: 0.005
+  normalize_max_gain: 30
+  windows_required: 2
+  windows_total: 5
+  cooldown_seconds: 10
+  mqtt_topic: "home/sensors/dog_bark"
+  mqtt_discovery: true
+  capture_enabled: false
+  capture_retention_hours: 24
+  capture_max_mb: 512
+  log_level: "info"
+
+schema:
+  device_id: str
+  detection_mode: "list(yamnet|heuristic)"
+  conf_threshold: "float(0.05,1.0)"
+  mic_device: str?
+  normalize_windows: bool
+  normalize_noise_floor: "float(0.0005,0.5)"
+  normalize_max_gain: "int(1,200)"
+  windows_required: "int(1,20)"
+  windows_total: "int(1,20)"
+  cooldown_seconds: "int(0,3600)"
+  mqtt_topic: str
+  mqtt_discovery: bool
+  capture_enabled: bool
+  capture_retention_hours: "int(1,168)"
+  capture_max_mb: "int(0,10240)"
+  log_level: "list(trace|debug|info|warning|error)"
+  # Only needed when not using the Mosquitto add-on.
+  mqtt_host: str?
+  mqtt_port: "port?"
+  mqtt_username: str?
+  mqtt_password: "password?"
+  dailybot_workflow_url: str?

@@ -16,8 +16,24 @@ Additionally, bark events can be sent to Dailybot, allowing you to build other t
 - Optional WAV capture around events using a rolling 20 s buffer.
 - Systemd unit file and Home Assistant automation example.
 
+## Install as a Home Assistant add-on (recommended)
+
+This repository is also a Home Assistant add-on repository. On Home Assistant OS
+or Supervised, add it under **Settings → Add-ons → Add-on Store → ⋮ →
+Repositories**, then install **Bark Detector**. It picks up MQTT credentials from
+the Mosquitto add-on and creates its own `binary_sensor` via MQTT discovery, so
+there is nothing to configure by hand.
+
+See [`barkdetector/DOCS.md`](barkdetector/DOCS.md) for options and tuning.
+
+## Run it standalone
+
+Everything below applies to running the detector directly on a normal Linux box
+(not Home Assistant OS). The application lives in `barkdetector/app/`.
+
 ## Requirements
-- Python 3.10+
+- Python 3.10–3.11 (`tflite-runtime` has no wheel past CPython 3.11; on 3.12+
+  install `ai-edge-litert` instead)
 - ALSA-compatible microphone (built-in or USB)
 - Access to an MQTT broker
 
@@ -28,7 +44,7 @@ Dependencies are listed in `requirements.txt` and installed via `scripts/setup.s
 ### 1. Setup
 ```bash
 git clone https://example.com/barkdetector.git
-cd barkdetector
+cd barkdetector/barkdetector/app
 ./scripts/setup.sh
 ```
 
@@ -40,8 +56,11 @@ source .venv/bin/activate
 ```
 
 ### 3. Configure
-Edit `config/config.yaml` to suit your environment:
-- **MQTT settings**: Update `host`, `port`, `username`, `password` to match your Home Assistant MQTT broker
+Copy `config/example-config.yaml` to `config/config.yaml` and edit it. That file
+is gitignored; keep credentials out of the repository.
+- **MQTT settings**: Update `host`, `port`, `username`, `password` to match your Home Assistant MQTT broker.
+  These can also be supplied as `BARKDETECTOR_MQTT_HOST` / `_PORT` / `_TOPIC` /
+  `_USERNAME` / `_PASSWORD` environment variables, which override the file.
 - **Audio device**: Use `--list-devices` (below) to find your microphone index
 - **Detection mode**: Choose `yamnet` (ML-based) or `heuristic` (simpler, faster)
 
@@ -70,7 +89,7 @@ On the first run, the script downloads `models/yamnet.tflite` and `models/yamnet
 
 ## Configuration
 - `config/config.yaml` contains runtime settings (audio, detection, MQTT, logging).
-- `config/config.example.yaml` shows default values.
+- `config/example-config.yaml` shows default values.
 - `capture.out_dir` and `logging.file_path` default to `/var/lib/barkdetector/captures` and `/var/log/barkdetector/barkdetector.log`. Ensure the process has permission to write to these paths or adjust them locally.
 
 ## Systemd Deployment

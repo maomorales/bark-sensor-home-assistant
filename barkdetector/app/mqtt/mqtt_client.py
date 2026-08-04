@@ -70,6 +70,41 @@ class MQTTPublisher:
         else:
             logger.debug("Published to MQTT topic {} with QoS {}", self.config.topic, qos)
 
+    def publish_discovery(self, device_id: str, device_name: str = "Bark Detector") -> None:
+        """Announce a binary sensor via Home Assistant's MQTT discovery.
+
+        The detector only publishes on an event, never an "all clear", so the
+        sensor relies on ``off_delay`` to fall back to off by itself.
+        """
+        object_id = "".join(c if c.isalnum() else "_" for c in device_id).strip("_")
+        config_topic = f"homeassistant/binary_sensor/{object_id}/bark/config"
+        payload = {
+            "name": "Bark",
+            "unique_id": f"{object_id}_bark",
+            "state_topic": self.config.topic,
+            "value_template": "{{ 'ON' if value_json.event == 'dog_bark' else 'OFF' }}",
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "device_class": "sound",
+            "off_delay": 10,
+            "json_attributes_topic": self.config.topic,
+            "device": {
+                "identifiers": [object_id],
+                "name": device_name,
+                "manufacturer": "barkdetector",
+                "model": "YAMNet microphone sensor",
+            },
+        }
+
+        data = json.dumps(payload)
+        if not self._connected.wait(timeout=5.0):
+            logger.warning("Not connected; discovery config may not reach the broker")
+        result = self.client.publish(config_topic, data, qos=1, retain=True)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            logger.info("Published MQTT discovery config to {}", config_topic)
+        else:
+            logger.error("Failed to publish discovery config (code {})", result.rc)
+
     # Callbacks -------------------------------------------------------
 
     def _on_connect(self, client, userdata, flags, rc):  # type: ignore[override]

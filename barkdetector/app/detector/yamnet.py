@@ -11,7 +11,18 @@ from typing import Iterable, List
 import numpy as np
 import requests
 from loguru import logger
-from tflite_runtime.interpreter import Interpreter
+
+# Imported lazily-ish: a missing interpreter must not break `import detector.yamnet`,
+# or main.py dies at import time and the heuristic fallback never gets a chance.
+# tflite-runtime is frozen at 2.14.0 (no wheel past CPython 3.11), so newer
+# interpreters need its successor package, ai-edge-litert.
+try:
+    from tflite_runtime.interpreter import Interpreter  # type: ignore
+except ImportError:  # pragma: no cover - depends on the installed runtime
+    try:
+        from ai_edge_litert.interpreter import Interpreter  # type: ignore
+    except ImportError:
+        Interpreter = None  # type: ignore[assignment]
 
 
 class YAMNetInitializationError(Exception):
@@ -34,6 +45,12 @@ class YAMNetBarkDetector:
         self.models_dir = models_dir or Path(__file__).resolve().parents[1] / "models"
         self.model_path = self.models_dir / "yamnet.tflite"
         self.classes_path = self.models_dir / "yamnet_class_map.csv"
+        if Interpreter is None:
+            raise YAMNetInitializationError(
+                "No TFLite interpreter available. Install 'tflite-runtime' "
+                "(CPython <= 3.11) or 'ai-edge-litert' (CPython >= 3.12)."
+            )
+
         self._interpreter: Interpreter | None = None
         self._bark_indices: List[int] = []
         self._input_index: int | None = None
