@@ -72,6 +72,7 @@ appears; a reboot after plugging it in usually resolves it.
 | `mqtt_topic` | `home/sensors/dog_bark` | Topic events are published to |
 | `mqtt_discovery` | `true` | Auto-create the Home Assistant binary sensor |
 | `capture_enabled` | `false` | Save a WAV around each event to `/media/barkdetector` |
+| `capture_normalize_peak` | `0.7` | Amplify saved clips to this peak so quiet events are audible; `0` saves raw |
 | `capture_retention_hours` | `24` | Clips older than this are deleted |
 | `capture_max_mb` | `512` | Hard ceiling on the clips folder; oldest go first. `0` disables |
 | `log_level` | `info` | Set to `debug` to log the score of every window |
@@ -127,6 +128,12 @@ bounds nothing. At the 512 MB default that is roughly 1,600 clips.
 Clips are written to `/media/barkdetector`, so they appear under **Media → My
 media → barkdetector** in the sidebar and play directly in the browser.
 Filenames are `YYYYMMDD_HHMMSS_<device_id>.wav` and sort chronologically.
+
+Distant events can be 40 dB below full scale, which is inaudible on playback
+even though the detector scores them fine. `capture_normalize_peak` amplifies
+each saved clip so its loudest moment reaches the given level. This touches the
+saved file only -- detection always runs on the unmodified audio -- so it cannot
+affect accuracy. Set it to 0 if you want the raw levels for analysis.
 
 Log files are separately capped at 25 MB (5 MB × 5 rotations).
 

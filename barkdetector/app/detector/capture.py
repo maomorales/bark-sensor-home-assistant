@@ -21,6 +21,10 @@ class CaptureConfig:
     pre_seconds: float
     post_seconds: float
     out_dir: Path
+    # Peak-normalise saved clips to this level so distant, quiet events are
+    # audible on playback. Affects the saved file only, never detection, which
+    # always scores the unmodified audio. 0 disables.
+    normalize_peak: float = 0.0
     max_age_hours: float = 0
     # Hard ceiling on the capture directory. Age alone bounds nothing: a noisy
     # night can produce thousands of files that are all younger than the age
@@ -185,9 +189,24 @@ class AudioCaptureManager:
     def _write_job(self, job: _CaptureJob) -> None:
         audio = job.final_audio()
         audio = np.clip(audio, -1.0, 1.0)
+
+        applied_gain = 1.0
+        if self.config.normalize_peak > 0:
+            peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+            if peak > 1e-6:
+                applied_gain = self.config.normalize_peak / peak
+                audio = np.clip(audio * applied_gain, -1.0, 1.0)
+
         int_audio = np.int16(audio * 32767)
         wavfile.write(job.file_path, self.sample_rate, int_audio)
-        logger.info("Saved capture to {}", job.file_path)
+        if applied_gain != 1.0:
+            logger.info(
+                "Saved capture to {} (playback gain {:.0f}x applied)",
+                job.file_path,
+                applied_gain,
+            )
+        else:
+            logger.info("Saved capture to {}", job.file_path)
         # Enforce on every write, not just on the hourly sweep -- a burst of
         # events can blow the budget many times over between two sweeps.
         self._enforce_size_budget()

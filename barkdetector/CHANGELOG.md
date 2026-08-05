@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- New `capture_normalize_peak` option (default 0.7): saved clips are amplified
+  so quiet, distant events are audible on playback. Detection is unaffected --
+  it always scores the unmodified audio.
+
 ## 0.2.1
 
 - Write captures to `/media/barkdetector` instead of `/share`, so they are

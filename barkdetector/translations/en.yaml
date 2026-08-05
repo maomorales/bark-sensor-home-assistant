@@ -53,8 +53,14 @@ configuration:
   capture_enabled:
     name: Save audio clips
     description: >-
-      Write a WAV around each event to /share/barkdetector/captures. Useful for
-      tuning, but it grows on disk.
+      Write a WAV around each event to /media/barkdetector, playable from the
+      Media panel. Useful for tuning, but it grows on disk.
+  capture_normalize_peak:
+    name: Normalise saved clips to
+    description: >-
+      Amplify each saved clip so its loudest point reaches this level, making
+      quiet or distant events audible on playback. Affects the saved file only,
+      never detection. Set to 0 to save the raw audio unchanged.
   capture_retention_hours:
     name: Keep clips for (hours)
     description: Clips older than this are deleted automatically.

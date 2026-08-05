@@ -85,6 +85,7 @@ def build_config(options: dict) -> dict:
             "ring_seconds": 20,
             "pre_seconds": 5,
             "post_seconds": 5,
+            "normalize_peak": float(options.get("capture_normalize_peak", 0.7)),
             "out_dir": CAPTURE_DIR,
             "max_age_hours": float(options.get("capture_retention_hours", 24)),
             "max_total_mb": float(options.get("capture_max_mb", 512)),

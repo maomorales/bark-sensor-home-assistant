@@ -193,6 +193,7 @@ def configure_capture(config: Dict[str, Any], sample_rate: int) -> AudioCaptureM
             pre_seconds=float(capture_cfg.get("pre_seconds", 5)),
             post_seconds=float(capture_cfg.get("post_seconds", 5)),
             out_dir=out_dir,
+            normalize_peak=float(capture_cfg.get("normalize_peak", 0)),
             max_age_hours=float(capture_cfg.get("max_age_hours", 0)),
             max_total_mb=float(capture_cfg.get("max_total_mb", 0)),
         ),
