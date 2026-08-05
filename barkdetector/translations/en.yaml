@@ -15,8 +15,10 @@ configuration:
   mic_device:
     name: Microphone
     description: >-
-      Part of the input device name, or a numeric index. Leave empty for the
-      system default. Prefer a name; indices change across reboots.
+      Leave empty on Home Assistant OS. Audio arrives via the Home Assistant
+      audio plugin, which exposes only "default", so pick your microphone by
+      making it the default input in Home Assistant instead. This option only
+      applies when running the detector standalone.
   normalize_windows:
     name: Boost quiet audio before analysis
     description: >-

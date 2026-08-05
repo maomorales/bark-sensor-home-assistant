@@ -1,6 +1,6 @@
 # https://developers.home-assistant.io/docs/apps/configuration#app-configuration
 name: Bark Detector
-version: "0.2.0"
+version: "0.2.1"
 slug: barkdetector
 description: Detect dog barks from a USB microphone with YAMNet and publish them to MQTT
 url: "https://github.com/mauriciomorales/barkdetector/tree/main/barkdetector"
@@ -21,7 +21,10 @@ audio: true
 services:
   - mqtt:want
 
+# media:rw puts captures where Home Assistant's Media browser can find and play
+# them; /share is not exposed there.
 map:
+  - media:rw
   - share:rw
 
 options:

@@ -15,9 +15,10 @@ from pathlib import Path
 
 import yaml
 
-# Captures land in /share so they are reachable from Home Assistant's Media or
-# Samba add-on; /data would be private to this add-on.
-CAPTURE_DIR = "/share/barkdetector/captures"
+# Captures land in /media so they show up in Home Assistant's Media browser and
+# can be played back in the UI. /share is not browsable there, and /data would
+# be private to this add-on.
+CAPTURE_DIR = "/media/barkdetector"
 
 
 def resolve_mic_device(raw: object) -> object:

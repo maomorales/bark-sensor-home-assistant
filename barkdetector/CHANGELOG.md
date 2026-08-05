@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Write captures to `/media/barkdetector` instead of `/share`, so they are
+  browsable and playable from Home Assistant's Media panel.
+- Correct the `mic_device` documentation: under Home Assistant OS, PortAudio
+  only ever sees `pulse` and `default`, so the microphone is chosen by setting
+  the default input in Home Assistant, not by this option.
+
 ## 0.2.0
 
 - Optional per-window normalisation before YAMNet inference, for quiet or
