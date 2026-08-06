@@ -19,9 +19,14 @@ A Raspberry Pi 4 runs this easily. Measured on a Pi 4 with Home Assistant OS
 
 1. Add this repository under **Settings → Add-ons → Add-on Store → ⋮ →
    Repositories**.
-2. Install **Bark Detector**.
+2. Install **Bark Detector**. The image is built on your machine, which takes
+   roughly **9 minutes on a Raspberry Pi 4** and shows no progress in the log.
+   That is normal — it is unpacking numpy, scipy and TensorFlow Lite, and the
+   time is disk-bound. Watch **Settings → System → Logs → Supervisor** if you
+   want to see the build proceed.
 3. Plug in the USB microphone **before starting the add-on**.
-4. Start it, then open the **Log** tab.
+4. Start it, then open the **Log** tab. You want to see
+   `YAMNet detector initialised successfully`.
 
 On first start the add-on downloads the YAMNet model (~14 MB) into the image's
 `models/` directory if it is not already bundled.
@@ -171,6 +176,9 @@ Discord or a person. The payload carries the same fields as MQTT plus
 `event_type: hardware_sensor` and `secret: sensor`. Leave it empty to disable.
 
 ## Troubleshooting
+
+**The install seems to hang** — it is building, not hung. Allow ~9 minutes on a
+Pi 4. The Supervisor log shows the build steps.
 
 **"No MQTT broker available"** — install the Mosquitto broker add-on, or set
 `mqtt_host` manually.

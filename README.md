@@ -21,8 +21,11 @@ https://github.com/maomorales/bark-sensor-home-assistant
 Then install **Bark Detector**. Full documentation is in
 [`barkdetector/DOCS.md`](barkdetector/DOCS.md).
 
-> The first install builds the image on your machine, which takes several
-> minutes on a Raspberry Pi. Subsequent updates are much faster.
+> **The first install builds the image on your machine and takes a while** —
+> about 9 minutes on a Raspberry Pi 4 with a class-10 SD card. The add-on log
+> stays quiet during this; it is not stuck. Most of the time goes on unpacking
+> the numpy, scipy and TensorFlow Lite wheels, which is disk-bound rather than
+> CPU-bound. Later updates reuse cached layers and are much faster.
 
 ## How it differs from what already exists
 
