@@ -163,6 +163,13 @@ barks you can clearly hear produce no rise in the `peak` value logged at debug
 level, the recording genuinely does not contain them, and the fix is microphone
 placement or a more sensitive/directional microphone.
 
+## DailyBot integration (optional)
+
+Set `dailybot_workflow_url` to a [DailyBot](https://dailybot.com/) workflow
+trigger URL and each bark event is also POSTed there, for routing to Slack,
+Discord or a person. The payload carries the same fields as MQTT plus
+`event_type: hardware_sensor` and `secret: sensor`. Leave it empty to disable.
+
 ## Troubleshooting
 
 **"No MQTT broker available"** — install the Mosquitto broker add-on, or set

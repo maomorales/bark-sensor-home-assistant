@@ -1,162 +1,148 @@
-# Bark Detector PoC
+<img src="barkdetector/logo.png" alt="Bark Detector" width="320">
 
-Python-based proof-of-concept that detects dog barks from a live Linux microphone and publishes MQTT events for Home Assistant automations. By default it uses the YAMNet TFLite model and falls back to a heuristic detector if the model cannot be loaded.
+# Bark Detector — Home Assistant add-on repository
 
-This program not only detects dog barks in real time, but also publishes these events over MQTT so that you can easily create automations in Home Assistant—for example, turning on lights, starting a recording on a camera, or activating a smart pet feeder when barking is detected.
+Detect dog barks from a **USB microphone attached to your Home Assistant
+machine**, and get a `binary_sensor` you can automate on.
 
-Additionally, bark events can be sent to Dailybot, allowing you to build other types of automations such as real-time notifications in Slack or Discord, or alerting specific people whenever barking occurs.
+Audio is classified locally by Google's [YAMNet][yamnet] via TensorFlow Lite.
+Nothing leaves your network.
 
+[![Open your Home Assistant instance and show the add add-on repository dialog.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmaomorales%2Fbark-sensor-home-assistant)
+
+## Install
+
+**Settings → Add-ons → Add-on Store → ⋮ → Repositories**, and add:
+
+```
+https://github.com/maomorales/bark-sensor-home-assistant
+```
+
+Then install **Bark Detector**. Full documentation is in
+[`barkdetector/DOCS.md`](barkdetector/DOCS.md).
+
+> The first install builds the image on your machine, which takes several
+> minutes on a Raspberry Pi. Subsequent updates are much faster.
+
+## How it differs from what already exists
+
+[Frigate][frigate] and [yamcam][yamcam] classify audio from **camera RTSP
+streams**, and both work well. This add-on reads a **locally attached
+microphone**, for rooms with no camera or spots a camera cannot reach.
 
 ## Features
-- Live audio capture via ALSA (`sounddevice`) with 16 kHz mono resampling.
-- YAMNet (TFLite) inference with automatic model download on first run.
-- Heuristic fallback using RMS and band-limited energy.
-- Sliding window scoring (1.0 s window, 0.5 s hop) with majority vote smoothing and cooldown.
-- MQTT publishing with automatic reconnection.
-- Optional WAV capture around events using a rolling 20 s buffer.
-- Systemd unit file and Home Assistant automation example.
 
-## Install as a Home Assistant add-on (recommended)
+- YAMNet (TFLite) classification, with a heuristic fallback if the model fails
+  to load, so detection degrades rather than stops
+- MQTT discovery creates the `binary_sensor` — no manual YAML
+- MQTT credentials taken from the Mosquitto add-on via the Supervisor
+- Sliding-window voting with a cooldown, to reject one-off transients
+- Optional clips saved to `/media`, playable in the Media panel, with the
+  confidence score in the filename
+- Storage bounded by both age and total size
 
-This repository is also a Home Assistant add-on repository. On Home Assistant OS
-or Supervised, add it under **Settings → Add-ons → Add-on Store → ⋮ →
-Repositories**, then install **Bark Detector**. It picks up MQTT credentials from
-the Mosquitto add-on and creates its own `binary_sensor` via MQTT discovery, so
-there is nothing to configure by hand.
+Resource use on a Raspberry Pi 4: **1.3% CPU, 88 MB RAM**.
 
-See [`barkdetector/DOCS.md`](barkdetector/DOCS.md) for options and tuning.
+## Example automation
 
-## Run it standalone
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.bark_detector_bark
+    to: "on"
+actions:
+  - action: notify.notify
+    data:
+      message: >-
+        🐶 Bark detected (confidence
+        {{ state_attr('binary_sensor.bark_detector_bark', 'score') }})
+```
 
-Everything below applies to running the detector directly on a normal Linux box
-(not Home Assistant OS). The application lives in `barkdetector/app/`.
+More examples, including the raw MQTT form, in
+[`ha_automation_example.yaml`](ha_automation_example.yaml).
 
-## Requirements
-- Python 3.10–3.11 (`tflite-runtime` has no wheel past CPython 3.11; on 3.12+
-  install `ai-edge-litert` instead)
-- ALSA-compatible microphone (built-in or USB)
-- Access to an MQTT broker
+## The microphone is the hard part
 
-Dependencies are listed in `requirements.txt` and installed via `scripts/setup.sh`.
+If the dogs you care about are far away, **the microphone determines whether
+this works** — not the software settings.
 
-## Quick Start
+Measured on the same Pi, in the same room, with identical settings:
 
-### 1. Setup
+| | Cheap USB electret | USB condenser |
+| --- | --- | --- |
+| Idle noise floor (peak) | 0.0115 | 0.0055 |
+| Distant barks clearly audible to a person | **nothing recorded** | detected, score 0.668 |
+
+Cheap capsules have a self-noise floor near 35–40 dB SPL. A distant bark is not
+merely quiet, it is *below that floor* — absent from the recording entirely. Gain,
+thresholds and normalisation all scale signal and noise together, so none of them
+recover it.
+
+What actually helps, in order of impact:
+
+1. **Move the microphone outdoors or to an open window** — worth 20–30 dB, more
+   than every software option combined
+2. **Use a low-self-noise capsule** — a condenser rather than a cheap electret
+3. **Point a directional mic at the source** — roughly 6 dB, and unlike gain it
+   genuinely improves the ratio by rejecting noise the signal does not share
+
+Set expectations accordingly: dogs in your house or a neighbour's yard are
+reliable. A kilometre away, outdoors, on a quiet night is best-effort.
+
+## Running standalone
+
+The detector also runs on any Linux box without Home Assistant. The application
+lives in [`barkdetector/app/`](barkdetector/app).
+
 ```bash
-git clone https://example.com/barkdetector.git
-cd barkdetector/barkdetector/app
+git clone https://github.com/maomorales/bark-sensor-home-assistant.git
+cd bark-sensor-home-assistant/barkdetector/app
 ./scripts/setup.sh
-```
-
-This creates a virtual environment, installs dependencies, and sets up directories.
-
-### 2. Activate Virtual Environment
-```bash
-source .venv/bin/activate
-```
-
-### 3. Configure
-Copy `config/example-config.yaml` to `config/config.yaml` and edit it. That file
-is gitignored; keep credentials out of the repository.
-- **MQTT settings**: Update `host`, `port`, `username`, `password` to match your Home Assistant MQTT broker.
-  These can also be supplied as `BARKDETECTOR_MQTT_HOST` / `_PORT` / `_TOPIC` /
-  `_USERNAME` / `_PASSWORD` environment variables, which override the file.
-- **Audio device**: Use `--list-devices` (below) to find your microphone index
-- **Detection mode**: Choose `yamnet` (ML-based) or `heuristic` (simpler, faster)
-
-### 4. List Available Microphones
-```bash
-python3 main.py --list-devices
-```
-
-### 5. Test MQTT Connection (Optional)
-Before running the detector, verify MQTT connectivity:
-```bash
-python3 test_mqtt.py
-```
-This subscribes to the bark topic and displays any incoming events. Press Ctrl+C to stop.
-
-### 6. Run the Detector
-```bash
-# With MQTT publishing
+cp config/example-config.yaml config/config.yaml   # then edit
 python3 main.py --config config/config.yaml
-
-# Dry run (no MQTT, testing only)
-python3 main.py --config config/config.yaml --dry-run
 ```
 
-On the first run, the script downloads `models/yamnet.tflite` and `models/yamnet_class_map.csv` if YAMNet mode is enabled.
+Requires Python 3.10–3.11: `tflite-runtime` publishes no wheel past CPython 3.11.
+On 3.12+ install `ai-edge-litert` instead, which the code also accepts.
 
-## Configuration
-- `config/config.yaml` contains runtime settings (audio, detection, MQTT, logging).
-- `config/example-config.yaml` shows default values.
-- `capture.out_dir` and `logging.file_path` default to `/var/lib/barkdetector/captures` and `/var/log/barkdetector/barkdetector.log`. Ensure the process has permission to write to these paths or adjust them locally.
+MQTT credentials can be supplied as `BARKDETECTOR_MQTT_HOST` / `_PORT` /
+`_TOPIC` / `_USERNAME` / `_PASSWORD`, which override the config file — keep them
+out of version control.
 
-## Systemd Deployment
+Useful flags:
+
 ```bash
-sudo mkdir -p /opt/barkdetector
-sudo cp -r . /opt/barkdetector/
-sudo cp service/barkdetector.service /etc/systemd/system/barkdetector@${USER}.service
-sudo systemctl daemon-reload
-sudo systemctl enable barkdetector@${USER}
-sudo systemctl start barkdetector@${USER}
+python3 main.py --list-devices             # find your microphone
+python3 main.py --config ... --dry-run     # detect without publishing
 ```
 
-The unit uses `/opt/barkdetector/config/config.yaml` as its configuration file.
+## Repository layout
 
-## Home Assistant Automation
-Import `ha_automation_example.yaml` to add a notification that fires when the MQTT topic receives a bark event.
+```
+repository.yaml          Home Assistant add-on repository manifest
+barkdetector/            the add-on
+  config.yaml            options schema and add-on metadata
+  Dockerfile             Debian-based image (see note below)
+  build.yaml             per-architecture base images
+  rootfs/                s6 service and options-to-config renderer
+  app/                   the Python application
+```
 
-## Notes
-- When YAMNet cannot be loaded (missing model, download failure, etc.), the heuristic detector remains active so events are still produced.
-- Use `--dry-run` to evaluate detection without publishing MQTT messages.
-- WAV captures are disabled automatically if the configured directory is not writable.
+### Why Debian and not the default Alpine base
 
-### DailyBot Integration
+`numpy`, `scipy` and `tflite-runtime` publish manylinux (glibc) wheels only. On
+Alpine's musl, pip falls back to building from source and fails on a Pi. The base
+is pinned to **bookworm** specifically, because bookworm ships Python 3.11 and
+`tflite-runtime` 2.14.0 — its final release — has no wheel beyond cp311.
 
-You can configure BarkDetector to send notifications to a [DailyBot](https://dailybot.com/) workflow when a bark is detected.
+`numpy` is pinned below 2.0 for the same reason: `tflite-runtime` is compiled
+against the NumPy 1.x C ABI, and NumPy 2.x makes the interpreter fail to load
+with `_ARRAY_API not found`.
 
-**Requirements:**
-- A DailyBot account.
-- A workflow with a **Trigger type: Universal API** (see [DailyBot docs on Universal Triggers](https://help.dailybot.com)).
-- Your workflow's trigger URL.
+## Licence
 
-**Steps:**
+MIT — see [LICENSE](LICENSE).
 
-1. **Create a new workflow in DailyBot**  
-   Go to your DailyBot dashboard and create a new workflow.  
-   Set the trigger type to **Universal API**.
-
-2. **Configure fields for the trigger:**  
-   - Set the event type to `"hardware_sensor"`.  
-   - Set the secret `"sensor"` (or another value, but then update the code's `send_dailybot_event()` to match).
-   - Optionally, configure any additional fields in the workflow for your use.
-
-3. **Copy the Workflow Trigger URL:**  
-   In the workflow's settings, you'll see a _Universal API Trigger URL_ (it looks like `https://api.dailybot.com/integrations/event/UUID-here/`).
-
-4. **Update your config:**  
-   In your `config.yaml` (or override at runtime with `--dailybot`), set the workflow URL:
-   ```yaml
-   dailybot:
-     workflow_url: "https://api.dailybot.com/integrations/event/UUID-here/"
-   ```
-   This URL will be used for POST requests when the detector triggers a bark event.
-
-**Payload details**  
-When a bark event is detected, the following JSON payload is sent to DailyBot:
-- `event_type` (default: `"hardware_sensor"`)
-- `secret` (default: `"sensor"`)
-- All bark detection metadata (`event`, `score`, `ts`, `device_id`, `detector`, etc.)
-- `capture_path` (if audio capture is enabled)
-
-If you use a custom `event_type` or `secret`, make sure to also update `main.py` in the `send_dailybot_event` function, so the payload matches what your workflow expects.
-
-**Enabling DailyBot integration**  
-- Use the `--dailybot` flag with `main.py` to enable sending events:
-  ```bash
-  python3 main.py --config config/config.yaml --dailybot
-  ```
-- If `workflow_url` is missing from config, DailyBot events will _not_ be sent.
-
-For troubleshooting, check logs to verify POSTs are reaching DailyBot.
+[yamnet]: https://www.tensorflow.org/hub/tutorials/yamnet
+[frigate]: https://docs.frigate.video/configuration/audio_detectors/
+[yamcam]: https://github.com/cecat/CeC-HA-Addons

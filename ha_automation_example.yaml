@@ -1,16 +1,68 @@
+# Example automations for the Bark Detector add-on.
+# Paste into Settings -> Automations -> Create -> Edit in YAML.
+
+# ---------------------------------------------------------------------------
+# Recommended: trigger on the entity created by MQTT discovery.
+# Survives broker and Home Assistant restarts, appears in history and logbook,
+# and is editable in the UI.
+#
+# The sensor clears itself 10 s after an event (off_delay), so while a dog keeps
+# barking the state stays "on" and this fires ONCE per barking session rather
+# than once per bark. That is usually what you want for a notification.
+# ---------------------------------------------------------------------------
 alias: Dog Bark Alert
-trigger:
-  - platform: mqtt
-    topic: home/sensors/dog_bark
-condition: []
-action:
-  - service: notify.mobile_app_yourphone
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.bark_detector_bark
+    to: "on"
+conditions: []
+actions:
+  - action: notify.notify
     data:
-      message: >
-        🐶 Bark detected ({{ (trigger.payload_json.score | float) | round(2) }})
-        via {{ trigger.payload_json.detector }} on {{ trigger.payload_json.device_id }}
-  # Optional: additional actions, such as turning on lights or cameras
-  # - service: switch.turn_on
-  #   target:
-  #     entity_id: switch.porch_camera_record
+      message: >-
+        🐶 Bark detected (confidence
+        {{ state_attr('binary_sensor.bark_detector_bark', 'score') }})
 mode: single
+# Optional extra actions:
+#  - action: switch.turn_on
+#    target:
+#      entity_id: switch.porch_camera_record
+
+# ---------------------------------------------------------------------------
+# Alternative: trigger on the raw MQTT message.
+# Fires once per EVENT rather than per session, so use this if you want every
+# individual detection. Requires no discovery.
+# ---------------------------------------------------------------------------
+# alias: Dog Bark Alert (raw MQTT)
+# triggers:
+#   - trigger: mqtt
+#     topic: home/sensors/dog_bark
+# actions:
+#   - action: notify.notify
+#     data:
+#       message: >-
+#         🐶 Bark detected ({{ trigger.payload_json.score | float | round(2) }})
+#         via {{ trigger.payload_json.detector }}
+#         on {{ trigger.payload_json.device_id }}
+# mode: single
+
+# ---------------------------------------------------------------------------
+# Only notify at night, and only for confident detections.
+# ---------------------------------------------------------------------------
+# alias: Night Barking Alert
+# triggers:
+#   - trigger: state
+#     entity_id: binary_sensor.bark_detector_bark
+#     to: "on"
+# conditions:
+#   - condition: time
+#     after: "22:00:00"
+#     before: "07:00:00"
+#   - condition: template
+#     value_template: >-
+#       {{ state_attr('binary_sensor.bark_detector_bark', 'score') | float(0) > 0.5 }}
+# actions:
+#   - action: notify.mobile_app_yourphone
+#     data:
+#       message: "🐶 Loud barking at {{ now().strftime('%H:%M') }}"
+# mode: single

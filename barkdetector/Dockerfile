@@ -38,5 +38,5 @@ RUN chmod a+x /etc/services.d/barkdetector/run \
 LABEL \
     org.opencontainers.image.title="Home Assistant App: Bark Detector" \
     org.opencontainers.image.description="Dog bark detection from a local USB microphone via YAMNet, published to MQTT." \
-    org.opencontainers.image.source="https://github.com/mauriciomorales/barkdetector" \
+    org.opencontainers.image.source="https://github.com/maomorales/bark-sensor-home-assistant" \
     org.opencontainers.image.licenses="MIT"

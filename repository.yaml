@@ -1,4 +1,4 @@
 # https://developers.home-assistant.io/docs/apps/repository#repository-configuration
 name: Bark Detector
-url: 'https://github.com/mauriciomorales/barkdetector'
+url: 'https://github.com/maomorales/bark-sensor-home-assistant'
 maintainer: Mauricio Morales <mauricio@dailybot.com>
