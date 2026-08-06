@@ -158,8 +158,14 @@ class AudioCaptureManager:
                     self._jobs.remove(job)
         return completed
 
-    def schedule_capture(self, event_ts: float, device_id: str) -> Optional[Path]:
-        """Schedule a capture around an event."""
+    def schedule_capture(
+        self, event_ts: float, device_id: str, score: float = 0.0
+    ) -> Optional[Path]:
+        """Schedule a capture around an event.
+
+        The score goes in the filename so clips can be sorted and reviewed by
+        confidence when tuning the threshold.
+        """
         if self._disabled or not self.config.enabled:
             return None
 
@@ -170,7 +176,9 @@ class AudioCaptureManager:
             return None
 
         timestamp = datetime.fromtimestamp(event_ts)
-        filename = f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{device_id}.wav"
+        filename = (
+            f"{timestamp.strftime('%Y%m%d_%H%M%S')}_s{score:.2f}_{device_id}.wav"
+        )
         file_path = self.config.out_dir / filename
 
         pre_audio = self._ring.recent(pre_samples)

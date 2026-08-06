@@ -374,7 +374,7 @@ def main() -> None:
                     else:
                         continue
 
-                triggered = smoother.update(positive, timestamp)
+                triggered = smoother.update(positive, timestamp, score)
                 # rms/peak make a dead microphone obvious: PortAudio can open a
                 # silent device and look perfectly healthy while scoring zeros.
                 logger.debug(
@@ -388,17 +388,22 @@ def main() -> None:
                 )
 
                 if triggered:
-                    capture_path = capture_manager.schedule_capture(timestamp, device_id)
+                    # The vote can be carried by earlier windows, so the final
+                    # window's score understates the event -- report the peak.
+                    event_score = smoother.last_peak_score
+                    capture_path = capture_manager.schedule_capture(
+                        timestamp, device_id, event_score
+                    )
                     payload = {
                         "event": "dog_bark",
-                        "score": float(round(score, 4)),
+                        "score": float(round(event_score, 4)),
                         "ts": int(timestamp),
                         "device_id": device_id,
                         "detector": detector_name,
                     }
                     logger.info(
                         "Bark event triggered score={:.3f} detector={} capture={}",
-                        score,
+                        event_score,
                         detector_name,
                         capture_path,
                     )

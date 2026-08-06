@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Report the strongest score across the voting window rather than the last
+  window's score. The vote can be carried by earlier windows, so events were
+  sometimes published with a confidence of 0.000 despite a clear detection.
+- Include the score in capture filenames
+  (`20260805_183327_s0.67_barkdetector.wav`) so clips can be reviewed by
+  confidence when choosing a threshold.
+
 ## 0.3.0
 
 - New `capture_normalize_peak` option (default 0.7): saved clips are amplified
